@@ -26,9 +26,9 @@ namespace OESDataDownloader
         private readonly UdpClient _resiver;
         private readonly IPEndPoint _endPoint;
         private IPEndPoint _remoteIpEndPoint;
+        private CancellationTokenSource _cts;
         private static string _remoteIp;
         private bool _oedIsAvaliable;
-
 
         private readonly byte[] _comGetStatus = { 10, 0, 1, 0, 0, 0, 0, 0 };
         private const int RemotePort = 3001;
@@ -41,14 +41,18 @@ namespace OESDataDownloader
         private readonly int[] _launchSize = new int[15];
         public MainWindow()
         {
+            // Загружаем файл локализации и Ip-адреса STM
             LoadConfiguration();
+            // Инициализация компонентов формы
             InitializeComponent();
+            // Установка состоянии элементов интерфейса в режиме ожидания
+            SetControlsReady();
             _ping = new Ping();
             _sender = new UdpClient();
             _resiver = new UdpClient(LocalPort) { Client = { ReceiveTimeout = TimeOut, DontFragment = false } };
             _endPoint = new IPEndPoint(IPAddress.Parse(_remoteIp), RemotePort);
         }
-        private void Window_Loaded(object sender, System.Windows.RoutedEventArgs e)
+        private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LbVersion.Content = "Версия ПО: " + Assembly.GetExecutingAssembly().GetName().Version;
             // Установка таймаута приемника проверки статуса соединения
@@ -61,6 +65,7 @@ namespace OESDataDownloader
         }
 
         #region NETStatus
+
         private void CheckNetStatus()
         {
             for (;;)
@@ -75,21 +80,27 @@ namespace OESDataDownloader
         }
         private bool CheckEthernet()
         {
-            if (!NetworkInterface.GetIsNetworkAvailable()) return false;
             try
             {
                 var pingReply = _ping.Send(_remoteIp, TimeOut);
-                if (pingReply != null && pingReply.Status == IPStatus.Success)
+                switch (pingReply?.Status)
                 {
-                    BtnIndicEthernet.Background = Brushes.GreenYellow;
+                case IPStatus.Success:
+                    Dispatcher.Invoke(() =>{ BtnIndicEthernet.Background = Brushes.GreenYellow; });
                     return true;
+                case IPStatus.TimedOut:
+                        AddToOperationsPerfomed("Ошибка пинга STM.");
+                    return false;
+                default:
+                        AddToOperationsPerfomed("Неизвестная ошибка, при попытке пинга.");
+                    return false;
                 }
             }
             catch (Exception ex)
             {
-                AddToOperationsPerfomed("Ошибка пинга STM: " + ex.Message);
+                AddToOperationsPerfomed("Ошибка: " + ex.Message);
+                return false;
             }
-            return false;
         }
         private bool CheckUsb()
         {
@@ -106,7 +117,10 @@ namespace OESDataDownloader
                 //Проверка доступности ОЕД 
                 if (resp[0] == 10 && resp[2] == 1 && resp[8] == 1)
                 {
-                    BtnIndicUsb.Background= Brushes.GreenYellow;
+                    Dispatcher.Invoke(() =>
+                    {
+                        BtnIndicUsb.Background = Brushes.GreenYellow;
+                    });
                     return true;
                 }
             }
@@ -114,7 +128,10 @@ namespace OESDataDownloader
             {
                 AddToOperationsPerfomed("STM не вернул статус USB соединения. TimeOut.");
             }
-            BtnIndicUsb.Background = Brushes.OrangeRed;
+            finally
+            {
+                Dispatcher.Invoke(() => { BtnIndicUsb.Background = Brushes.OrangeRed; }); 
+            }
             return false;
         }
         private bool CheckOed()
@@ -145,22 +162,28 @@ namespace OESDataDownloader
                     AddToLaunchInfo(ToBigEndian(data, 2 + 128, 2), ToBigEndian(data, 4 + 128, 4));
                     AddToOperationsPerfomed("Количество записанных диагностик: " + ToBigEndian(data, 2 + 128, 2));
                 }
-
-                BtnIndicOed.Background= Brushes.GreenYellow;
+                Dispatcher.Invoke(() =>{ BtnIndicOed.Background = Brushes.GreenYellow; });
                 return true;
             }
             catch (SocketException)
             {
                 AddToOperationsPerfomed("ОЕД не вернул список пусков. TimeOut.");
             }
-                ListBLaunchInfo.Items.Clear();
-
-            BtnIndicOed.Background = Brushes.OrangeRed;
+            finally
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    ListBLaunchInfo.Items.Clear();
+                    BtnIndicOed.Background = Brushes.OrangeRed;
+                });
+            }
             return false;
         }
+
         #endregion
 
         #region ControlsCommands
+
         /// <summary>
         /// Запрос на получение всех пусков
         /// </summary>
@@ -189,12 +212,14 @@ namespace OESDataDownloader
 
             return data;
         }
+
         /// <summary>
         /// Запрос на получение пуска
         /// </summary>
         /// <param name="number">Номер пуска</param>
+        /// <param name="ctsToken">Токен отмены задачи</param>
         /// <returns></returns>
-        private Task<byte[]> GetLaunch(int number)
+        private byte[] GetLaunchFromStm(int number, CancellationToken ctsToken)
         {
             #region ArrayDefinitions
 
@@ -228,15 +253,15 @@ namespace OESDataDownloader
             }
             #endregion
 
-            _sender.Send(preplaunch, preplaunch.Length, _endPoint);
-            // Ожидание считывания информации о пуске во Флэш память ОЭД
-            Thread.Sleep(10_000);
-            do
-            {
-                _sender.Send(fill2Kbuff, fill2Kbuff.Length, _endPoint);
-                Thread.Sleep(4);
+            try
+            {   
+                _sender.Send(preplaunch, preplaunch.Length, _endPoint);
+                // Ожидание считывания информации о пуске во Флэш память ОЭД
+                Thread.Sleep(10_000);
+                do
                 {
-                    try
+                    _sender.Send(fill2Kbuff, fill2Kbuff.Length, _endPoint);
+                    Thread.Sleep(4);
                     {
                         for (int i = 0; i < 2; i++)
                         {
@@ -252,33 +277,42 @@ namespace OESDataDownloader
                                 counter += data.Length - counter;
                             }
                         }
-                    }
-                    catch (SocketException)
-                    {
-                        AddToOperationsPerfomed("Ошибка считывания пуска с ОЕД. TimeOut.");
-                    }
-                }
-            } while (_launchSize[index] > counter);
 
+                    }
+                    // Проверяем задачу на токен отмены
+                    ctsToken.ThrowIfCancellationRequested();
+                } while (_launchSize[index] > counter);
+            }
+            catch (SocketException)
+            {
+                AddToOperationsPerfomed("Ошибка считывания пуска с ОЕД. TimeOut.");
+            }
+            catch (OperationCanceledException)
+            {
+                AddToOperationsPerfomed("Скачивание отмененно.");
+            }
             return data;
         }
+
         #endregion
 
         #region LanguageConfiguration
         // Переключение локализации на русский
-        private void btnLangRus_Click(object sender, EventArgs e)
+        private void BtnLangRus_Click(object sender, RoutedEventArgs e)
         {
+            var call = MainContainer.Children;
+            call.Clear();
             Thread.CurrentThread.CurrentUICulture = new CultureInfo("ru-RU");
             InitializeComponent();
         }
         // Переключение локализации на французкий
-        private void btnLangFr_Click(object sender, EventArgs e)
+        private void BtnLangFr_Click(object sender, RoutedEventArgs e)
         {
             Thread.CurrentThread.CurrentUICulture = new CultureInfo("fr-FR");
             InitializeComponent();
         }
         // Переключение локализации на английский
-        private void btnLangEng_Click(object sender, EventArgs e)
+        private void BtnLangEng_Click(object sender, RoutedEventArgs e)
         {
             Thread.CurrentThread.CurrentUICulture = new CultureInfo("en-US");
             InitializeComponent();
@@ -351,20 +385,21 @@ namespace OESDataDownloader
 
         #endregion
 
-        #region AddToList     
+        #region AddToList    
+        
         /// <summary>
         /// Служебное сообщение (использует Invoke)
         /// </summary>
         /// <param name="message">Текст сообщения</param>
         private void AddToOperationsPerfomed(string message)
         {
-            Dispatcher.Invoke(new Action(() =>
+            Dispatcher.Invoke(() =>
             {
                 ListBOperationsPerfomed.Items.Add(@"[" + DateTime.Now + @"] " + message);
                 object lastItem = ListBOperationsPerfomed.Items[ListBOperationsPerfomed.Items.Count - 1];
                 ListBOperationsPerfomed.Items.MoveCurrentTo(lastItem);
                 ListBOperationsPerfomed.ScrollIntoView(lastItem);
-            }));
+            });
         }
         /// <summary>
         /// Информация о пуске (использует Invoke)
@@ -374,10 +409,7 @@ namespace OESDataDownloader
         /// <param name="size">Размер</param>
         private void AddToLaunchInfo(byte launch, int sizepack, int size)
         {
-            Dispatcher.Invoke(new Action(() =>
-            {
-                ListBLaunchInfo.Items.Add(@"Пуск: " + launch + @" Количество пакетов: " + sizepack + @" Размер: " + size + " B");
-            }));
+            Dispatcher.Invoke(() =>{ ListBLaunchInfo.Items.Add(@"Пуск: " + launch + @" Количество пакетов: " + sizepack + @" Размер: " + size + " B"); });
         }
         /// <summary>
         /// Информация о диагностике (использует Invoke)
@@ -386,10 +418,7 @@ namespace OESDataDownloader
         /// <param name="size"> Размер диагностик в B</param>
         private void AddToLaunchInfo(int sizediag, int size)
         {
-            Dispatcher.Invoke(new Action(() =>
-            {
-                ListBLaunchInfo.Items.Add(@"Количество диагностик: " + sizediag + @" Размер: " + size + " B");
-            }));
+            Dispatcher.Invoke(() =>{ ListBLaunchInfo.Items.Add(@"Количество диагностик: " + sizediag + @" Размер: " + size + " B"); });
         }
         /// <summary>
         /// Добавление нового сохраненного файла
@@ -397,13 +426,35 @@ namespace OESDataDownloader
         /// <param name="index">Номер пуска</param>
         private void AddToSavedInfo(int index)
         {
-            Dispatcher.Invoke(new Action(() =>
-            {
-                ListBSavedInfo.Items.Add("Пуск номер: " + index);
-            }));
+            Dispatcher.Invoke(() =>{ ListBSavedInfo.Items.Add("Пуск номер: " + index); });
         }
+
         #endregion
 
+        #region SuportMethods
+
+        /// <summary>
+        /// Установка состоянии элементов интерфейса в режиме ожидания
+        /// </summary>
+        private void SetControlsReady()
+        {
+            btnDeleteAll.IsEnabled = true;
+            btnFormating.IsEnabled = true;
+            btnSave.IsEnabled = true;
+            PbDownloadStatus.Visibility = Visibility.Hidden;
+            BtnCancelDownload.Visibility = Visibility.Hidden;
+        }
+        /// <summary>
+        /// Установка состояния эелемента интерфейса при загрузке пусков
+        /// </summary>
+        private void SetControlsDownloading()
+        {
+            btnDeleteAll.IsEnabled = false;
+            btnFormating.IsEnabled = false;
+            btnSave.IsEnabled = false;
+            PbDownloadStatus.Visibility = Visibility.Visible;
+            BtnCancelDownload.Visibility = Visibility.Visible;
+        }
         /// <summary>
         /// Преобразование к порядку байтов Little Endian
         /// </summary>
@@ -442,32 +493,47 @@ namespace OESDataDownloader
             return result;
         }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
+        #endregion
+
+        private async void Save_Click(object sender, RoutedEventArgs e)
         {
+            // Проверяем, доступен ли ОЕД
             if (!_oedIsAvaliable) return;
+
             var index = ListBLaunchInfo.SelectedIndex;
             var launch = index + 1;
             if (index != -1)
-            {
+            { 
                 LbBytesReceived.Content = @"0/" + _launchSize[index];
                 PbDownloadStatus.Visibility = Visibility.Visible;
                 PbDownloadStatus.Value = 0;
                 PbDownloadStatus.Maximum = _launchSize[index];
 
-                GetLaunchAsync(launch);
+                SetControlsDownloading();
+                // Создаем токен отмены задачи
+                _cts = new CancellationTokenSource();
 
+                await Task.Run(() => GetLaunch(launch, _cts.Token), _cts.Token);
+
+                SetControlsReady();
             }
             else MessageBox.Show("Выберите пуск для скачивания!");
         }
 
-        private async void GetLaunchAsync(int launch)
+        private void GetLaunch(int launch, CancellationToken ctsToken)
         {
-            var data = await GetLaunch(launch);
+            byte[] data = GetLaunchFromStm(launch, ctsToken);
             using (var bw = new BinaryWriter(new FileStream(launch + ".imi", FileMode.OpenOrCreate)))
             {
                 bw.Write(data);
             }
             AddToSavedInfo(launch);
+        }
+
+        private void BtnCancelDownload_Click(object sender, RoutedEventArgs e)
+        {
+            _cts.Cancel();
+            SetControlsReady();
         }
     }
 }

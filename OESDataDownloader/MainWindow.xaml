@@ -5,10 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="OESDataDownloader" Height="730" Width="940" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Closing="Window_Closing" Loaded="Window_Loaded">
-    <Grid>
+    <Grid Name="MainContainer">
         <Button x:Name="BtnIndicEthernet" Content="Наличие соединения по Ethernet" HorizontalAlignment="Left" Margin="17,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
-        <Button x:Name="BtnIndicUsb" Content="Наличие соединения по USB" HorizontalAlignment="Left" Margin="318,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
-        <Button x:Name="BtnIndicOed" Content="Наличие связи с ОЭД" HorizontalAlignment="Left" Margin="618,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
+        <Button x:Name="BtnIndicUsb" Content="Наличие соединения по USB" HorizontalAlignment="Left" Margin="317,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
+        <Button x:Name="BtnIndicOed" Content="Наличие связи с ОЭД" HorizontalAlignment="Left" Margin="617,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
         <GroupBox x:Name="GbSavedFiles" Header="Сохраненные файлы" HorizontalAlignment="Left" Height="405" Margin="18,42,0,0" VerticalAlignment="Top" Width="440">
             <ListBox x:Name="ListBSavedInfo"/>
         </GroupBox>
@@ -18,27 +18,27 @@
         <GroupBox x:Name="GbOperationsPerformed" Header="Выполняемые операции" HorizontalAlignment="Left" Height="131" Margin="18,452,0,0" VerticalAlignment="Top" Width="900">
             <ListBox x:Name="ListBOperationsPerfomed" HorizontalAlignment="Left" Width="890" Margin="0,0,-2,-2"/>
         </GroupBox>
-        <Button Name="Save"  Content="Сохранить" HorizontalAlignment="Left" Margin="276,646,0,0" VerticalAlignment="Top" Width="120" Height="30" Click="Save_Click"/>
-        <Button Content="Удалить всё" HorizontalAlignment="Left" Margin="410,646,0,0" VerticalAlignment="Top" Width="120" Height="30"/>
-        <Button Content="Форматировать" HorizontalAlignment="Left" Margin="541,646,0,0" VerticalAlignment="Top" Width="120" Height="30"/>
+        <Button x:Name="btnSave"  Content="Сохранить" HorizontalAlignment="Left" Margin="276,646,0,0" VerticalAlignment="Top" Width="120" Height="30" Click="Save_Click"/>
+        <Button x:Name="btnDeleteAll" Content="Удалить всё" HorizontalAlignment="Left" Margin="410,646,0,0" VerticalAlignment="Top" Width="120" Height="30"/>
+        <Button x:Name="btnFormating" Content="Форматировать" HorizontalAlignment="Left" Margin="541,646,0,0" VerticalAlignment="Top" Width="120" Height="30"/>
         <Label Content="Расположение сохраняемых файлов: " HorizontalAlignment="Left" Margin="19,608,0,0" VerticalAlignment="Top"/>
         <Label x:Name="LbVersion" Content="Версия ПО: 0.0.0.0" HorizontalAlignment="Left" Margin="10,666,0,0" VerticalAlignment="Top"/>
-        <Button Content="" HorizontalAlignment="Left" Margin="795,667,0,0" VerticalAlignment="Top" Width="30" Height="20">
+        <Button Name="BtnLangEng" Content="" HorizontalAlignment="Left" Margin="795,667,0,0" VerticalAlignment="Top" Width="30" Height="20" Click="BtnLangEng_Click">
             <Button.Background>
                 <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Flag_Of_Britain.jpg"/>
             </Button.Background>
         </Button>
-        <Button Content="" HorizontalAlignment="Left" Margin="830,667,0,0" VerticalAlignment="Top" Width="30" Height="20" RenderTransformOrigin="0.513,1.679">
+        <Button Name="BtnLangFr" Content="" HorizontalAlignment="Left" Margin="830,667,0,0" VerticalAlignment="Top" Width="30" Height="20" RenderTransformOrigin="0.513,1.679" Click="BtnLangFr_Click">
             <Button.Background>
                 <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Flag_of_France.png"/>
             </Button.Background>
         </Button>
-        <Button Content="" HorizontalAlignment="Left" Margin="760,667,0,0" VerticalAlignment="Top" Width="30" Height="20">
+        <Button Name="BtnLangRus" Content="" HorizontalAlignment="Left" Margin="760,667,0,0" VerticalAlignment="Top" Width="30" Height="20" Click="BtnLangRus_Click">
             <Button.Background>
                 <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Flag_of_Russia.png"/>
             </Button.Background>
         </Button>
-        <Button HorizontalAlignment="Left" Margin="888,667,0,0" VerticalAlignment="Top" Width="30" Height="25" RenderTransformOrigin="1.208,1.047">
+        <Button HorizontalAlignment="Left" Margin="888,662,0,0" VerticalAlignment="Top" Width="30" Height="25" RenderTransformOrigin="1.208,1.047">
             <Button.Background>
                 <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Properties.png"/>
             </Button.Background>
@@ -47,5 +47,6 @@
             <ProgressBar x:Name="PbDownloadStatus" HorizontalAlignment="Left" Height="25" VerticalAlignment="Top" Width="899" Margin="0,7,0,0"/>
         </Grid>
         <Label x:Name="LbBytesReceived" Content="0/0" HorizontalAlignment="Left" Margin="818,620,0,0" VerticalAlignment="Top" Height="26" Width="100"/>
+        <Button x:Name="BtnCancelDownload" Content="Отмена" HorizontalAlignment="Left" Margin="705,623,0,0" VerticalAlignment="Top" Width="75" Click="BtnCancelDownload_Click"/>
     </Grid>
 </Window>
