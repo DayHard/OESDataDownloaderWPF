@@ -31,11 +31,11 @@ namespace OESDataDownloader
         private bool _oedIsAvaliable;
 
         private readonly byte[] _comGetStatus = { 10, 0, 1, 0, 0, 0, 0, 0 };
-        private const int RemotePort = 3001;
+        private const int RemotePort = 40101;
         //private readonly byte[] _comGetStatus = { 10, 1, 0, 0, 0, 0, 0, 0 };
         //private const int RemotePort = 3000;
         private const int TimeOut = 100;
-        private const int LocalPort = 3000;
+        private const int LocalPort = 40100;
         private const int ConnectionRetry = 1000;
 
         private readonly int[] _launchSize = new int[15];
@@ -123,15 +123,19 @@ namespace OESDataDownloader
                     });
                     return true;
                 }
+                else
+                {
+                    AddToOperationsPerfomed("USB не доступен.");
+                }
             }
             catch (SocketException)
             {
                 AddToOperationsPerfomed("STM не вернул статус USB соединения. TimeOut.");
-            }
-            finally
+            }         
+            Dispatcher.Invoke(() => 
             {
-                Dispatcher.Invoke(() => { BtnIndicUsb.Background = Brushes.OrangeRed; }); 
-            }
+                BtnIndicUsb.Background = Brushes.OrangeRed;
+            }); 
             return false;
         }
         private bool CheckOed()
@@ -165,18 +169,15 @@ namespace OESDataDownloader
                 Dispatcher.Invoke(() =>{ BtnIndicOed.Background = Brushes.GreenYellow; });
                 return true;
             }
-            catch (SocketException)
+            catch (SocketException ex)
             {
                 AddToOperationsPerfomed("ОЕД не вернул список пусков. TimeOut.");
-            }
-            finally
+            }   
+            Dispatcher.Invoke(() =>
             {
-                Dispatcher.Invoke(() =>
-                {
-                    ListBLaunchInfo.Items.Clear();
-                    BtnIndicOed.Background = Brushes.OrangeRed;
-                });
-            }
+                ListBLaunchInfo.Items.Clear();
+                BtnIndicOed.Background = Brushes.OrangeRed;
+            });                
             return false;
         }
 
@@ -276,6 +277,11 @@ namespace OESDataDownloader
                                 Array.Copy(rdata, 8, data, counter, data.Length - counter);
                                 counter += data.Length - counter;
                             }
+                            Dispatcher.Invoke(() => 
+                            {
+                                PbDownloadStatus.Value = counter;
+                                LbBytesReceived.Content = counter + "/" + _launchSize[index];
+                            });
                         }
 
                     }
