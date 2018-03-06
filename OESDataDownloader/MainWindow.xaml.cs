@@ -52,6 +52,7 @@ namespace OESDataDownloader
             _resiver = new UdpClient(LocalPort) { Client = { ReceiveTimeout = TimeOut, DontFragment = false } };
             _endPoint = new IPEndPoint(IPAddress.Parse(_remoteIp), RemotePort);
         }
+
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LbVersion.Content = "Версия ПО: " + Assembly.GetExecutingAssembly().GetName().Version;
@@ -123,10 +124,7 @@ namespace OESDataDownloader
                     });
                     return true;
                 }
-                else
-                {
                     AddToOperationsPerfomed("USB не доступен.");
-                }
             }
             catch (SocketException)
             {
@@ -169,7 +167,7 @@ namespace OESDataDownloader
                 Dispatcher.Invoke(() =>{ BtnIndicOed.Background = Brushes.GreenYellow; });
                 return true;
             }
-            catch (SocketException ex)
+            catch (SocketException)
             {
                 AddToOperationsPerfomed("ОЕД не вернул список пусков. TimeOut.");
             }   
@@ -444,9 +442,9 @@ namespace OESDataDownloader
         /// </summary>
         private void SetControlsReady()
         {
-            btnDeleteAll.IsEnabled = true;
-            btnFormating.IsEnabled = true;
-            btnSave.IsEnabled = true;
+            BtnDeleteAll.IsEnabled = true;
+            BtnFormating.IsEnabled = true;
+            BtnSave.IsEnabled = true;
             PbDownloadStatus.Visibility = Visibility.Hidden;
             BtnCancelDownload.Visibility = Visibility.Hidden;
         }
@@ -455,9 +453,9 @@ namespace OESDataDownloader
         /// </summary>
         private void SetControlsDownloading()
         {
-            btnDeleteAll.IsEnabled = false;
-            btnFormating.IsEnabled = false;
-            btnSave.IsEnabled = false;
+            BtnDeleteAll.IsEnabled = false;
+            BtnFormating.IsEnabled = false;
+            BtnSave.IsEnabled = false;
             PbDownloadStatus.Visibility = Visibility.Visible;
             BtnCancelDownload.Visibility = Visibility.Visible;
         }
@@ -529,11 +527,13 @@ namespace OESDataDownloader
         private void GetLaunch(int launch, CancellationToken ctsToken)
         {
             byte[] data = GetLaunchFromStm(launch, ctsToken);
-            using (var bw = new BinaryWriter(new FileStream(launch + ".imi", FileMode.OpenOrCreate)))
+            string savedPath = Path.Combine(Directory.GetCurrentDirectory(), DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            using (var bw = new BinaryWriter(new FileStream(savedPath + launch + ".imi", FileMode.OpenOrCreate)))
             {
                 bw.Write(data);
             }
             AddToSavedInfo(launch);
+            LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + savedPath;
         }
 
         private void BtnCancelDownload_Click(object sender, RoutedEventArgs e)
