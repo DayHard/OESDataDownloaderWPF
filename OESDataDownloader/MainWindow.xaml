@@ -19,8 +19,8 @@
             <ListBox x:Name="ListBOperationsPerfomed" HorizontalAlignment="Left" Width="890" Margin="0,0,-2,-2"/>
         </GroupBox>
         <Button x:Name="BtnSave"  Content="Сохранить" HorizontalAlignment="Left" Margin="276,646,0,0" VerticalAlignment="Top" Width="120" Height="30" Click="Save_Click"/>
-        <Button x:Name="BtnDeleteAll" Content="Удалить всё" HorizontalAlignment="Left" Margin="410,646,0,0" VerticalAlignment="Top" Width="120" Height="30"/>
-        <Button x:Name="BtnFormating" Content="Форматировать" HorizontalAlignment="Left" Margin="541,646,0,0" VerticalAlignment="Top" Width="120" Height="30"/>
+        <Button x:Name="BtnDeleteAll" Content="Удалить всё" HorizontalAlignment="Left" Margin="410,646,0,0" VerticalAlignment="Top" Width="120" Height="30" Click="BtnDeleteAll_Click"/>
+        <Button x:Name="BtnFormating" Content="Форматировать" HorizontalAlignment="Left" Margin="541,646,0,0" VerticalAlignment="Top" Width="120" Height="30" Click="BtnFormating_Click"/>
         <Label x:Name="LabSavedFilesPaths" Content="Расположение сохраняемых файлов: " HorizontalAlignment="Left" Margin="19,608,0,0" VerticalAlignment="Top"/>
         <Label x:Name="LbVersion" Content="Версия ПО: 0.0.0.0" HorizontalAlignment="Left" Margin="10,666,0,0" VerticalAlignment="Top"/>
         <Button Name="BtnLangEng" Content="" HorizontalAlignment="Left" Margin="795,667,0,0" VerticalAlignment="Top" Width="30" Height="20" Click="BtnLangEng_Click">

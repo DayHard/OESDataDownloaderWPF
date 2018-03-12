@@ -37,6 +37,7 @@ namespace OESDataDownloader
         private const int TimeOut = 100;
         private const int LocalPort = 40100;
         private const int ConnectionRetry = 1000;
+        private const int ResiveTimeOut = 1000;
 
         private readonly int[] _launchSize = new int[15];
         public MainWindow()
@@ -201,15 +202,25 @@ namespace OESDataDownloader
             }
 
             _sender.Send(request, request.Length, _endPoint);
-            var receivedData = _resiver.Receive(ref _remoteIpEndPoint);
 
-            if (receivedData.Length != 200)
+            _resiver.Client.ReceiveTimeout = ResiveTimeOut;
+
+            try
+            {
+                var receivedData = _resiver.Receive(ref _remoteIpEndPoint);
+
+                if (receivedData.Length != 200)
+                    return null;
+
+                var data = new byte[receivedData.Length - 8];
+                Array.Copy(receivedData, 8, data, 0, data.Length);
+                return data;
+            }
+            catch (SocketException)
+            {
+                AddToOperationsPerfomed("Ошибка. Список пусков не получен. TimeOut.");
                 return null;
-
-            var data = new byte[receivedData.Length - 8];
-            Array.Copy(receivedData, 8, data, 0, data.Length);
-
-            return data;
+            }
         }
 
         /// <summary>
@@ -243,7 +254,7 @@ namespace OESDataDownloader
             for (int i = 0; i < data.Length; i++)
                 data[i] = 0;
             // Таймаут приема UDP
-            _resiver.Client.ReceiveTimeout = 3000;
+            _resiver.Client.ReceiveTimeout = ResiveTimeOut;
 
             // Очистка буфера приема UDP
             if (_resiver.Available > 0)
@@ -499,6 +510,7 @@ namespace OESDataDownloader
 
         #endregion
 
+        // Скачать пуск номер
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
             // Проверяем, доступен ли ОЕД
@@ -514,16 +526,19 @@ namespace OESDataDownloader
                 PbDownloadStatus.Maximum = _launchSize[index];
 
                 SetControlsDownloading();
+
+                // Для скачивания диагностики
+                if (launch == ListBLaunchInfo.Items.Count)
+                    launch = 0xDA;
+
                 // Создаем токен отмены задачи
                 _cts = new CancellationTokenSource();
-
                 await Task.Run(() => GetLaunch(launch, _cts.Token), _cts.Token);
 
                 SetControlsReady();
             }
             else MessageBox.Show("Выберите пуск для скачивания!");
         }
-
         private void GetLaunch(int launch, CancellationToken ctsToken)
         {
             byte[] data = GetLaunchFromStm(launch, ctsToken);
@@ -535,11 +550,74 @@ namespace OESDataDownloader
             AddToSavedInfo(launch);
             LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + savedPath;
         }
-
+        // Отменить скачивание пуска
         private void BtnCancelDownload_Click(object sender, RoutedEventArgs e)
         {
             _cts.Cancel();
             SetControlsReady();
+        }
+        // Удалить все пуски
+        private async void BtnDeleteAll_Click(object sender, RoutedEventArgs e)
+        {
+            // Проверяем, доступен ли ОЕД
+            if (!_oedIsAvaliable) return;
+
+            // Подтверждение удаления пусков
+            if (MessageBox.Show("Вы уверены, что хотите удалить все пуски?", "Внимание", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
+                return;
+
+            await Task.Run(() => DeleteAllLaunches());
+
+            MessageBox.Show("Все пуски были успешно удалены.");
+        }
+        private void DeleteAllLaunches()
+        {
+           
+            byte[] deleteAllLaunches = new byte[8];
+            deleteAllLaunches[0] = 12;
+            deleteAllLaunches[2] = 5;
+
+            _sender.Send(deleteAllLaunches, deleteAllLaunches.Length, _endPoint);
+
+            // Запрашиваем информацию о пусках, пока не получим ответ
+            while (true)
+            {
+                Thread.Sleep(1000);
+
+                if (CheckOed())
+                    break;
+            }
+        }
+        // Форматировать ОЭД
+        private async void BtnFormating_Click(object sender, RoutedEventArgs e)
+        {
+            // Проверяем, доступен ли ОЕД
+            if (!_oedIsAvaliable) return;
+
+            // Подтверждение форматирования Flash
+            if (MessageBox.Show("Вы уверены, что хотите отформатировать FLASH?", "Внимание", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
+                return;
+
+            await Task.Run(() => FormatOed());
+
+            MessageBox.Show("ОЭД успешно отформатирован.");
+        }
+        private void FormatOed()
+        {
+            byte[] formatOed = new byte[8];
+            formatOed[0] = 12;
+            formatOed[2] = 5;
+
+            _sender.Send(formatOed, formatOed.Length, _endPoint);
+
+            // Запрашиваем информацию о пусках, пока не получим ответ
+            while (true)
+            {
+                Thread.Sleep(1000);
+
+                if (CheckOed())
+                    break;
+            }
         }
     }
 }
