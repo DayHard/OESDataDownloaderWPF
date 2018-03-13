@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -11,8 +12,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using System.Xml;
 using System.Xml.Linq;
+using Timer = System.Timers.Timer;
 
 namespace OESDataDownloader
 {
@@ -27,6 +30,8 @@ namespace OESDataDownloader
         private readonly IPEndPoint _endPoint;
         private IPEndPoint _remoteIpEndPoint;
         private CancellationTokenSource _cts;
+        private static readonly DispatcherTimer _timer = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
+        private static readonly Stopwatch _swatch = new Stopwatch();
         private static string _remoteIp;
         private bool _oedIsAvaliable;
 
@@ -52,6 +57,7 @@ namespace OESDataDownloader
             _sender = new UdpClient();
             _resiver = new UdpClient(LocalPort) { Client = { ReceiveTimeout = TimeOut, DontFragment = false } };
             _endPoint = new IPEndPoint(IPAddress.Parse(_remoteIp), RemotePort);
+            _timer.Tick += Timer_Tick;
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -453,22 +459,32 @@ namespace OESDataDownloader
         /// </summary>
         private void SetControlsReady()
         {
+            _swatch.Reset();
+            _timer.Stop();
+
             BtnDeleteAll.IsEnabled = true;
             BtnFormating.IsEnabled = true;
             BtnSave.IsEnabled = true;
             PbDownloadStatus.Visibility = Visibility.Hidden;
             BtnCancelDownload.Visibility = Visibility.Hidden;
+            LbTimeEllapsed.Visibility = Visibility.Hidden;
+            LbBytesReceived.Visibility = Visibility.Hidden;
         }
         /// <summary>
         /// Установка состояния эелемента интерфейса при загрузке пусков
         /// </summary>
         private void SetControlsDownloading()
         {
+            _swatch.Start();
+            _timer.Start();
+
             BtnDeleteAll.IsEnabled = false;
             BtnFormating.IsEnabled = false;
             BtnSave.IsEnabled = false;
             PbDownloadStatus.Visibility = Visibility.Visible;
             BtnCancelDownload.Visibility = Visibility.Visible;
+            LbTimeEllapsed.Visibility = Visibility.Visible;
+            LbBytesReceived.Visibility = Visibility.Visible;
         }
         /// <summary>
         /// Преобразование к порядку байтов Little Endian
@@ -538,6 +554,14 @@ namespace OESDataDownloader
                 SetControlsReady();
             }
             else MessageBox.Show("Выберите пуск для скачивания!");
+        }
+
+        private void Timer_Tick(object sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                LbTimeEllapsed.Content = "Прошло: " + _swatch.Elapsed;
+            });
         }
         private void GetLaunch(int launch, CancellationToken ctsToken)
         {
