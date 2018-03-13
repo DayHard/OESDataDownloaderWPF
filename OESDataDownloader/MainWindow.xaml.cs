@@ -147,9 +147,21 @@ namespace OESDataDownloader
         {
             try
             {
+                // Очистим список загруженных пусков
+                Dispatcher.Invoke(() => 
+                {
+                    ListBLaunchInfo.Items.Clear();
+                });
+
                 var data = GetAllInfo();
+
                 if (data == null)
+                {
+                    AddToOperationsPerfomed("STM сцуко ЛЁГ!!!");
                     return false;
+                }
+
+                    //throw new Exception("STM не ответил на запрос.");
 
                 if (ToLittleEndian(data, 5, 2) == 0x1506)
                 {
@@ -166,13 +178,17 @@ namespace OESDataDownloader
                     AddToOperationsPerfomed("Количество записанных пусков: " + data[4]);
                 }
 
-                if (ToBigEndian(data, 2 + 128, 2) != 0 && ToBigEndian(data, 4 + 128, 4) != 0)
+                if (data.Length != 8 && ToBigEndian(data, 2 + 128, 2) != 0 && ToBigEndian(data, 4 + 128, 4) != 0)
                 {
+                    _launchSize[_launchSize.Length - 1] = ToBigEndian(data, 4 + 128, 4);
                     AddToLaunchInfo(ToBigEndian(data, 2 + 128, 2), ToBigEndian(data, 4 + 128, 4));
                     AddToOperationsPerfomed("Количество записанных диагностик: " + ToBigEndian(data, 2 + 128, 2));
                 }
-                Dispatcher.Invoke(() =>{ BtnIndicOed.Background = Brushes.GreenYellow; });
-                return true;
+                if (data.Length != 8)
+                {
+                    Dispatcher.Invoke(() =>{ BtnIndicOed.Background = Brushes.GreenYellow; });
+                    return true;
+                }
             }
             catch (SocketException)
             {
@@ -215,6 +231,10 @@ namespace OESDataDownloader
             {
                 var receivedData = _resiver.Receive(ref _remoteIpEndPoint);
 
+                // Если оэд не отвечает
+                if (receivedData[3] == 0xff)
+                    return receivedData;
+
                 if (receivedData.Length != 200)
                     return null;
 
@@ -253,8 +273,12 @@ namespace OESDataDownloader
             fill2Kbuff[0] = 12;
             fill2Kbuff[2] = 3;
 
-            var index = number - 1;
-            var counter = 0;
+            int index = -1, counter = 0;
+
+            if (number == 0xda)
+                 index = ListBLaunchInfo.Items.Count - 1;
+            else index = number - 1;
+
             var data = new byte[_launchSize[index]];
             // Инициализируем массив приема нулями
             for (int i = 0; i < data.Length; i++)
@@ -292,7 +316,7 @@ namespace OESDataDownloader
                                 Array.Copy(rdata, 8, data, counter, data.Length - counter);
                                 counter += data.Length - counter;
                             }
-                            Dispatcher.Invoke(() => 
+                            Dispatcher.Invoke(() =>
                             {
                                 PbDownloadStatus.Value = counter;
                                 LbBytesReceived.Content = counter + "/" + _launchSize[index];
@@ -560,19 +584,23 @@ namespace OESDataDownloader
         {
             Dispatcher.Invoke(() =>
             {
-                LbTimeEllapsed.Content = "Прошло: " + _swatch.Elapsed;
+                LbTimeEllapsed.Content = "Прошло: " + _swatch.Elapsed.Seconds;
+                //PbDownloadStatus.Value = BytesReceived;
+                //LbBytesReceived.Content = BytesReceived + "/" + _launchSize[index];
             });
         }
         private void GetLaunch(int launch, CancellationToken ctsToken)
         {
             byte[] data = GetLaunchFromStm(launch, ctsToken);
-            string savedPath = Path.Combine(Directory.GetCurrentDirectory(), DateTime.Now.ToString(CultureInfo.InvariantCulture));
-            using (var bw = new BinaryWriter(new FileStream(savedPath + launch + ".imi", FileMode.OpenOrCreate)))
+            //string savedPath = Path.Combine(Directory.GetCurrentDirectory(), DateTime.ToString(CultureInfo.InvariantCulture));
+            //using (var bw = new BinaryWriter(new FileStream(savedPath + "/" + launch + ".imi", FileMode.OpenOrCreate)))
+            using (var bw = new BinaryWriter(new FileStream(launch + ".imi", FileMode.OpenOrCreate)))
             {
                 bw.Write(data);
             }
             AddToSavedInfo(launch);
-            LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + savedPath;
+            //LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + savedPath;
+   
         }
         // Отменить скачивание пуска
         private void BtnCancelDownload_Click(object sender, RoutedEventArgs e)
@@ -592,6 +620,7 @@ namespace OESDataDownloader
 
             await Task.Run(() => DeleteAllLaunches());
 
+            AddToOperationsPerfomed("Удаление произведено успешно.");
             MessageBox.Show("Все пуски были успешно удалены.");
         }
         private void DeleteAllLaunches()
@@ -599,7 +628,7 @@ namespace OESDataDownloader
            
             byte[] deleteAllLaunches = new byte[8];
             deleteAllLaunches[0] = 12;
-            deleteAllLaunches[2] = 5;
+            deleteAllLaunches[2] = 4;
 
             _sender.Send(deleteAllLaunches, deleteAllLaunches.Length, _endPoint);
 
@@ -624,6 +653,7 @@ namespace OESDataDownloader
 
             await Task.Run(() => FormatOed());
 
+            AddToOperationsPerfomed("Форматирование произведено успешно.");
             MessageBox.Show("ОЭД успешно отформатирован.");
         }
         private void FormatOed()
