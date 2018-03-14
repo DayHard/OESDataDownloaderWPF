@@ -33,6 +33,7 @@ namespace OESDataDownloader
         private static DateTime _timepassed;
         private static string _remoteIp;
         private bool _oedIsAvaliable;
+        private bool _diagIsAvaliable;
 
         private readonly byte[] _comGetStatus = { 10, 0, 1, 0, 0, 0, 0, 0 };
         private const int RemotePort = 40101;
@@ -147,6 +148,7 @@ namespace OESDataDownloader
         {
             try
             {
+                _diagIsAvaliable = false;
                 // Очистим список загруженных пусков
                 Dispatcher.Invoke(() => 
                 {
@@ -157,7 +159,7 @@ namespace OESDataDownloader
 
                 if (data == null)
                 {
-                    AddToOperationsPerfomed("STM сцуко ЛЁГ!!!");
+                    AddToOperationsPerfomed("STM ЛЁГ!");
                     return false;
                 }
 
@@ -183,6 +185,7 @@ namespace OESDataDownloader
                     _launchSize[_launchSize.Length - 1] = ToBigEndian(data, 4 + 128, 4);
                     AddToLaunchInfo(ToBigEndian(data, 2 + 128, 2), ToBigEndian(data, 4 + 128, 4));
                     AddToOperationsPerfomed("Количество записанных диагностик: " + ToBigEndian(data, 2 + 128, 2));
+                    _diagIsAvaliable = true;
                 }
                 if (data.Length != 8)
                 {
@@ -257,14 +260,14 @@ namespace OESDataDownloader
         /// <returns></returns>
         private byte[] GetLaunchFromStm(int number, CancellationToken ctsToken)
         {
-            #region ArrayDefinitions
+            #region LocalDefinitions
 
             // Команда
             // Скачать пуск номер number (привести к byte)
-            var preplaunch = new byte[8];
+            var preplaunch = new byte[9];
             preplaunch[0] = 12;
             preplaunch[2] = 2;
-            preplaunch[7] = (byte)number;
+            preplaunch[8] = (byte)number;
 
             // Команда
             // Заполнить 2к буффер
@@ -276,7 +279,7 @@ namespace OESDataDownloader
             int index = -1, counter = 0;
 
             if (number == 0xda)
-                 index = ListBLaunchInfo.Items.Count - 1;
+                 index = _launchSize.Length - 1;
             else index = number - 1;
 
             var data = new byte[_launchSize[index]];
@@ -294,7 +297,8 @@ namespace OESDataDownloader
             #endregion
 
             try
-            {   
+            {
+
                 _sender.Send(preplaunch, preplaunch.Length, _endPoint);
                 // Ожидание считывания информации о пуске во Флэш память ОЭД
                 Thread.Sleep(10_000);
@@ -555,10 +559,10 @@ namespace OESDataDownloader
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
             // Проверяем, доступен ли ОЕД
-            //if (!_oedIsAvaliable) return;
+            if (!_oedIsAvaliable) return;
 
             // Создаем папку для сохранения пусков текущей сессии
-            var path = DateTime.Now.ToShortDateString() + " " + DateTime.Now.Hour + "-" + DateTime.Now.Minute + "-" + DateTime.Now.Second;
+            var path = DateTime.Now.ToShortDateString() + " Time " + DateTime.Now.Hour + " " + DateTime.Now.Minute + " " + DateTime.Now.Second;
             Directory.CreateDirectory(path);
 
             var seletedIndexes = new int[ListBLaunchInfo.SelectedItems.Count];
@@ -571,20 +575,24 @@ namespace OESDataDownloader
                 k++;
             }
 
-            foreach (int index in seletedIndexes)
+            for (int i = 0; i < seletedIndexes.Length; i++)
             {
-                var launch = index + 1;
-                if (index != -1)
+                var launch = seletedIndexes[i] + 1;
+
+                if (_diagIsAvaliable && seletedIndexes[i] == ListBLaunchInfo.Items.Count - 1)
+                    launch = _launchSize.Length;
+
+                if (launch != -1)
                 {
-                    LbBytesReceived.Content = @"0/" + _launchSize[index];
+                    LbBytesReceived.Content = @"0/" + _launchSize[launch - 1];
                     PbDownloadStatus.Visibility = Visibility.Visible;
                     PbDownloadStatus.Value = 0;
-                    PbDownloadStatus.Maximum = _launchSize[index];
+                    PbDownloadStatus.Maximum = _launchSize[launch - 1];
 
                     SetControlsDownloading();
 
                     // Для скачивания диагностики
-                    if (launch == ListBLaunchInfo.Items.Count)
+                    if (_diagIsAvaliable && launch == 15)
                         launch = 0xDA;
 
                     // Создаем токен отмены задачи
@@ -609,15 +617,23 @@ namespace OESDataDownloader
         {
             byte[] data = GetLaunchFromStm(launch, ctsToken);
 
-            string fullPath = path + @"\" + launch + ".imi";
+            // Если качаем диагностику, устанавливаем имя файла diagnostics
+            string fileName = launch.ToString();
+            if (launch == 0xDA)
+                fileName = "diagnostics";
+
+            string fullPath = path + @"\" + fileName + ".imi";
             using (var bw = new BinaryWriter(new FileStream(fullPath, FileMode.OpenOrCreate)))
             {
                 bw.Write(data);
             }
 
             AddToSavedInfo(launch);
-            LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + @"\\" + path + @"\\";
-   
+            Dispatcher.Invoke(() => 
+            {
+                LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + @"\\" + path + @"\\";
+            });
+
         }
         // Отменить скачивание пуска
         private void BtnCancelDownload_Click(object sender, RoutedEventArgs e)
