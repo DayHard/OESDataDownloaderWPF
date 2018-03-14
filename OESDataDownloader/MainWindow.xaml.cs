@@ -15,7 +15,6 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
 using System.Xml.Linq;
-using Timer = System.Timers.Timer;
 
 namespace OESDataDownloader
 {
@@ -30,8 +29,8 @@ namespace OESDataDownloader
         private readonly IPEndPoint _endPoint;
         private IPEndPoint _remoteIpEndPoint;
         private CancellationTokenSource _cts;
-        private static readonly DispatcherTimer _timer = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
-        private static readonly Stopwatch _swatch = new Stopwatch();
+        private static readonly DispatcherTimer Timer = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
+        private static DateTime _timepassed;
         private static string _remoteIp;
         private bool _oedIsAvaliable;
 
@@ -57,7 +56,8 @@ namespace OESDataDownloader
             _sender = new UdpClient();
             _resiver = new UdpClient(LocalPort) { Client = { ReceiveTimeout = TimeOut, DontFragment = false } };
             _endPoint = new IPEndPoint(IPAddress.Parse(_remoteIp), RemotePort);
-            _timer.Tick += Timer_Tick;
+            // Подпись на событие, для секундомера
+            Timer.Tick += Timer_Tick;
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -483,8 +483,10 @@ namespace OESDataDownloader
         /// </summary>
         private void SetControlsReady()
         {
-            _swatch.Reset();
-            _timer.Stop();
+            // Сброс пройденного времени с начала закачки
+            _timepassed = new DateTime();
+            LbTimeEllapsed.Content = "Прошло: " + _timepassed.ToString("mm:ss");
+            Timer.Stop();            
 
             BtnDeleteAll.IsEnabled = true;
             BtnFormating.IsEnabled = true;
@@ -499,8 +501,7 @@ namespace OESDataDownloader
         /// </summary>
         private void SetControlsDownloading()
         {
-            _swatch.Start();
-            _timer.Start();
+            Timer.Start();
 
             BtnDeleteAll.IsEnabled = false;
             BtnFormating.IsEnabled = false;
@@ -554,52 +555,68 @@ namespace OESDataDownloader
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
             // Проверяем, доступен ли ОЕД
-            if (!_oedIsAvaliable) return;
+            //if (!_oedIsAvaliable) return;
 
-            var index = ListBLaunchInfo.SelectedIndex;
-            var launch = index + 1;
-            if (index != -1)
-            { 
-                LbBytesReceived.Content = @"0/" + _launchSize[index];
-                PbDownloadStatus.Visibility = Visibility.Visible;
-                PbDownloadStatus.Value = 0;
-                PbDownloadStatus.Maximum = _launchSize[index];
+            // Создаем папку для сохранения пусков текущей сессии
+            var path = DateTime.Now.ToShortDateString() + " " + DateTime.Now.Hour + "-" + DateTime.Now.Minute + "-" + DateTime.Now.Second;
+            Directory.CreateDirectory(path);
 
-                SetControlsDownloading();
+            var seletedIndexes = new int[ListBLaunchInfo.SelectedItems.Count];
 
-                // Для скачивания диагностики
-                if (launch == ListBLaunchInfo.Items.Count)
-                    launch = 0xDA;
-
-                // Создаем токен отмены задачи
-                _cts = new CancellationTokenSource();
-                await Task.Run(() => GetLaunch(launch, _cts.Token), _cts.Token);
-
-                SetControlsReady();
+            var k = 0;
+            // Создаем массив, с номерами выделеных пусков
+            foreach (var item in ListBLaunchInfo.SelectedItems)
+            {
+                seletedIndexes[k] = ListBLaunchInfo.Items.IndexOf(item);
+                k++;
             }
-            else MessageBox.Show("Выберите пуск для скачивания!");
+
+            foreach (int index in seletedIndexes)
+            {
+                var launch = index + 1;
+                if (index != -1)
+                {
+                    LbBytesReceived.Content = @"0/" + _launchSize[index];
+                    PbDownloadStatus.Visibility = Visibility.Visible;
+                    PbDownloadStatus.Value = 0;
+                    PbDownloadStatus.Maximum = _launchSize[index];
+
+                    SetControlsDownloading();
+
+                    // Для скачивания диагностики
+                    if (launch == ListBLaunchInfo.Items.Count)
+                        launch = 0xDA;
+
+                    // Создаем токен отмены задачи
+                    _cts = new CancellationTokenSource();
+                    await Task.Run(() => GetLaunch(launch, path, _cts.Token), _cts.Token);
+
+                    SetControlsReady();
+                }
+                else MessageBox.Show("Выберите пуск для скачивания!");
+            }
         }
 
         private void Timer_Tick(object sender, EventArgs e)
         {
+            _timepassed = _timepassed.AddSeconds(1);
             Dispatcher.Invoke(() =>
             {
-                LbTimeEllapsed.Content = "Прошло: " + _swatch.Elapsed.Seconds;
-                //PbDownloadStatus.Value = BytesReceived;
-                //LbBytesReceived.Content = BytesReceived + "/" + _launchSize[index];
+                LbTimeEllapsed.Content = "Прошло: " + _timepassed.ToString("mm:ss");
             });
         }
-        private void GetLaunch(int launch, CancellationToken ctsToken)
+        private void GetLaunch(int launch,string path, CancellationToken ctsToken)
         {
             byte[] data = GetLaunchFromStm(launch, ctsToken);
-            //string savedPath = Path.Combine(Directory.GetCurrentDirectory(), DateTime.ToString(CultureInfo.InvariantCulture));
-            //using (var bw = new BinaryWriter(new FileStream(savedPath + "/" + launch + ".imi", FileMode.OpenOrCreate)))
-            using (var bw = new BinaryWriter(new FileStream(launch + ".imi", FileMode.OpenOrCreate)))
+
+            string fullPath = path + @"\" + launch + ".imi";
+            using (var bw = new BinaryWriter(new FileStream(fullPath, FileMode.OpenOrCreate)))
             {
                 bw.Write(data);
             }
+
             AddToSavedInfo(launch);
-            //LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + savedPath;
+            LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + @"\\" + path + @"\\";
    
         }
         // Отменить скачивание пуска
@@ -672,6 +689,34 @@ namespace OESDataDownloader
                 if (CheckOed())
                     break;
             }
+        }
+
+        private void GenerateLaunches_Click(object sender, RoutedEventArgs e)
+        {
+            AddToLaunchInfo(1, 10, 100);
+            AddToLaunchInfo(2, 20, 200);
+            AddToLaunchInfo(3, 30, 300);
+            AddToLaunchInfo(4, 40, 400);
+            AddToLaunchInfo(5, 50, 500);
+            AddToLaunchInfo(6, 60, 600);
+            AddToLaunchInfo(7, 70, 700);
+            AddToLaunchInfo(8, 80, 800);
+            AddToLaunchInfo(9, 90, 900);
+            AddToLaunchInfo(10, 100, 1000);
+            AddToLaunchInfo(11, 110, 1200);
+            AddToLaunchInfo(12, 120, 1300);
+            AddToLaunchInfo(13, 120, 1400);
+            AddToLaunchInfo(5, 50);
+        }
+
+        private void ShowDowmloadingControls_Click(object sender, RoutedEventArgs e)
+        {
+            SetControlsDownloading();
+        }
+
+        private void HideDownloadingControls_Click(object sender, RoutedEventArgs e)
+        {
+            SetControlsReady();
         }
     }
 }
