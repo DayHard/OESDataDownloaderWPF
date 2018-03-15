@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing.Printing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -15,6 +16,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
 using System.Xml.Linq;
+using OESDataDownloader.Support;
 
 namespace OESDataDownloader
 {
@@ -23,10 +25,14 @@ namespace OESDataDownloader
     /// </summary>
     public partial class MainWindow
     {
+
+        #region Variables
+
         private readonly Ping _ping;
         private readonly UdpClient _sender;
         private readonly UdpClient _resiver;
         private readonly IPEndPoint _endPoint;
+        private readonly InProgress _inProgress;
         private IPEndPoint _remoteIpEndPoint;
         private CancellationTokenSource _cts;
         private static readonly DispatcherTimer Timer = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
@@ -47,6 +53,8 @@ namespace OESDataDownloader
         private const int ResiveTimeOut = 1000;
 
         private readonly int[] _launchSize = new int[15];
+
+        #endregion
         public MainWindow()
         {
             // Загружаем файл локализации и Ip-адреса STM
@@ -60,7 +68,7 @@ namespace OESDataDownloader
             _sender = new UdpClient();
             _resiver = new UdpClient(LocalPort) { Client = { ReceiveTimeout = TimeOut, DontFragment = false } };
             _endPoint = new IPEndPoint(IPAddress.Parse(_remoteIp), RemotePort);
-
+            _inProgress = new InProgress();
             // Подпись на событие, для секундомера
             Timer.Tick += Timer_Tick;
             // Подпись на событие, поддержания связи с STM
@@ -68,28 +76,26 @@ namespace OESDataDownloader
             // Запуск таймера
             DoNotCloseConnectionTimer.Start();
         }
-        // Команда STM не закрывать соединение
-        private void DoNotCloseConnetionTimer_Tick(object sender, EventArgs e)
-        {
-            try
-            {
-                _sender.Send(_doNotClose, _doNotClose.Length, _endPoint);
-            }
-            catch (Exception ex)
-            {
-                AddToOperationsPerfomed(ex.Message);
-            }
-        }
-
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LbVersion.Content = "Версия ПО: " + Assembly.GetExecutingAssembly().GetName().Version;
             // Установка таймаута приемника проверки статуса соединения
             var thread = new Thread(CheckNetStatus) { IsBackground = true };
             thread.Start();
+            // Задаем владельца формы
+            _inProgress.Owner = this;
+            _inProgress.WindowStartupLocation = WindowStartupLocation.CenterOwner;
         }
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            // Закрытие формы загрузки
+            _inProgress.Close();
+            // Остановка отправки команды на поддержания соединения
+            DoNotCloseConnectionTimer.Stop();
+            //Закрытие портов перед выходом из программы
+            _resiver.Close();
+            _sender.Close();
+            // Обновление файла конфигурации
             UpdateConfiguration();
         }
 
@@ -271,9 +277,36 @@ namespace OESDataDownloader
                 return null;
             }
         }
-
         /// <summary>
-        /// Запрос на получение пуска
+        /// Скачать пуск(запускать в отдельном потомке\задаче)
+        /// </summary>
+        /// <param name="launch">Номер пуска</param>
+        /// <param name="path">Путь сохранения пуска</param>
+        /// <param name="ctsToken">Токен отмены</param>
+        private void GetLaunch(int launch, string path, CancellationToken ctsToken)
+        {
+            byte[] data = GetLaunchFromStm(launch, ctsToken);
+
+            // Если качаем диагностику, устанавливаем имя файла diagnostics
+            string fileName = launch.ToString();
+            if (launch == 0xDA)
+                fileName = "diagnostics";
+
+            string fullPath = path + @"\" + fileName + ".imi";
+            using (var bw = new BinaryWriter(new FileStream(fullPath, FileMode.OpenOrCreate)))
+            {
+                bw.Write(data);
+            }
+
+            AddToSavedInfo(launch);
+            Dispatcher.Invoke(() =>
+            {
+                LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + @"\\" + path + @"\\";
+            });
+
+        }
+        /// <summary>
+        /// Запрос на получение пуска из STM
         /// </summary>
         /// <param name="number">Номер пуска</param>
         /// <param name="ctsToken">Токен отмены задачи</param>
@@ -362,6 +395,46 @@ namespace OESDataDownloader
                 AddToOperationsPerfomed("Скачивание отмененно.");
             }
             return data;
+        }
+        /// <summary>
+        /// Удалить все пуски (запускать в отдельном потомке\задаче)
+        /// </summary>
+        private void DeleteAllLaunches()
+        {
+            byte[] deleteAllLaunches = new byte[8];
+            deleteAllLaunches[0] = 12;
+            deleteAllLaunches[2] = 4;
+
+            _sender.Send(deleteAllLaunches, deleteAllLaunches.Length, _endPoint);
+
+            // Запрашиваем информацию о пусках, пока не получим ответ
+            while (true)
+            {
+                Thread.Sleep(1000);
+
+                if (CheckOed())
+                break;
+            }
+        }
+        /// <summary>
+        /// Отморматирвоть ОЭД (запускать в отдельном потомке\задаче)
+        /// </summary>
+        private void FormatOed()
+        {
+            byte[] formatOed = new byte[8];
+            formatOed[0] = 12;
+            formatOed[2] = 5;
+
+            _sender.Send(formatOed, formatOed.Length, _endPoint);
+
+            // Запрашиваем информацию о пусках, пока не получим ответ
+            while (true)
+            {
+                Thread.Sleep(1000);
+
+                if (CheckOed())
+                break;
+            }
         }
 
         #endregion
@@ -583,6 +656,19 @@ namespace OESDataDownloader
                 LbTimeEllapsed.Content = "Прошло: " + _timepassed.ToString("mm:ss");
             });
         }
+
+        // Команда STM не закрывать соединение
+        private void DoNotCloseConnetionTimer_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                _sender.Send(_doNotClose, _doNotClose.Length, _endPoint);
+            }
+            catch (Exception ex)
+            {
+                AddToOperationsPerfomed(ex.Message);
+            }
+        }
         // Сгенерировать пуски
         private void GenerateLaunches_Click(object sender, RoutedEventArgs e)
         {
@@ -687,29 +773,6 @@ namespace OESDataDownloader
                 else MessageBox.Show("Выберите пуск для скачивания!");
             }
         }
-        private void GetLaunch(int launch,string path, CancellationToken ctsToken)
-        {
-            byte[] data = GetLaunchFromStm(launch, ctsToken);
-
-            // Если качаем диагностику, устанавливаем имя файла diagnostics
-            string fileName = launch.ToString();
-            if (launch == 0xDA)
-                fileName = "diagnostics";
-
-            string fullPath = path + @"\" + fileName + ".imi";
-            using (var bw = new BinaryWriter(new FileStream(fullPath, FileMode.OpenOrCreate)))
-            {
-                bw.Write(data);
-            }
-
-            AddToSavedInfo(launch);
-            Dispatcher.Invoke(() => 
-            {
-                LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + @"\\" + path + @"\\";
-            });
-
-        }
-
         // Отменить скачивание пуска
         private void BtnCancelDownload_Click(object sender, RoutedEventArgs e)
         {
@@ -731,24 +794,6 @@ namespace OESDataDownloader
             AddToOperationsPerfomed("Удаление произведено успешно.");
             MessageBox.Show("Все пуски были успешно удалены.");
         }
-        private void DeleteAllLaunches()
-        {
-           
-            byte[] deleteAllLaunches = new byte[8];
-            deleteAllLaunches[0] = 12;
-            deleteAllLaunches[2] = 4;
-
-            _sender.Send(deleteAllLaunches, deleteAllLaunches.Length, _endPoint);
-
-            // Запрашиваем информацию о пусках, пока не получим ответ
-            while (true)
-            {
-                Thread.Sleep(1000);
-
-                if (CheckOed())
-                    break;
-            }
-        }
         // Форматировать ОЭД
         private async void BtnFormating_Click(object sender, RoutedEventArgs e)
         {
@@ -759,27 +804,15 @@ namespace OESDataDownloader
             if (MessageBox.Show("Вы уверены, что хотите отформатировать FLASH?", "Внимание", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
                 return;
 
+            _inProgress.Show();
+
             await Task.Run(() => FormatOed());
+
+            _inProgress.Hide();
 
             AddToOperationsPerfomed("Форматирование произведено успешно.");
             MessageBox.Show("ОЭД успешно отформатирован.");
         }
-        private void FormatOed()
-        {
-            byte[] formatOed = new byte[8];
-            formatOed[0] = 12;
-            formatOed[2] = 5;
 
-            _sender.Send(formatOed, formatOed.Length, _endPoint);
-
-            // Запрашиваем информацию о пусках, пока не получим ответ
-            while (true)
-            {
-                Thread.Sleep(1000);
-
-                if (CheckOed())
-                    break;
-            }
-        }
     }
 }
