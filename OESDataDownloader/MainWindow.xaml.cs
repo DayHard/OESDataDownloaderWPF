@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -11,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
@@ -30,12 +30,14 @@ namespace OESDataDownloader
         private IPEndPoint _remoteIpEndPoint;
         private CancellationTokenSource _cts;
         private static readonly DispatcherTimer Timer = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
+        private static readonly DispatcherTimer DoNotCloseConnectionTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1)};
         private static DateTime _timepassed;
         private static string _remoteIp;
         private bool _oedIsAvaliable;
         private bool _diagIsAvaliable;
 
         private readonly byte[] _comGetStatus = { 10, 0, 1, 0, 0, 0, 0, 0 };
+        private readonly byte[] _doNotClose = {10, 0, 0, 0, 0, 0, 0, 0};
         private const int RemotePort = 40101;
         //private readonly byte[] _comGetStatus = { 10, 1, 0, 0, 0, 0, 0, 0 };
         //private const int RemotePort = 3000;
@@ -53,12 +55,30 @@ namespace OESDataDownloader
             InitializeComponent();
             // Установка состоянии элементов интерфейса в режиме ожидания
             SetControlsReady();
+
             _ping = new Ping();
             _sender = new UdpClient();
             _resiver = new UdpClient(LocalPort) { Client = { ReceiveTimeout = TimeOut, DontFragment = false } };
             _endPoint = new IPEndPoint(IPAddress.Parse(_remoteIp), RemotePort);
+
             // Подпись на событие, для секундомера
             Timer.Tick += Timer_Tick;
+            // Подпись на событие, поддержания связи с STM
+            DoNotCloseConnectionTimer.Tick += DoNotCloseConnetionTimer_Tick;
+            // Запуск таймера
+            DoNotCloseConnectionTimer.Start();
+        }
+        // Команда STM не закрывать соединение
+        private void DoNotCloseConnetionTimer_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                _sender.Send(_doNotClose, _doNotClose.Length, _endPoint);
+            }
+            catch (Exception ex)
+            {
+                AddToOperationsPerfomed(ex.Message);
+            }
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -276,7 +296,7 @@ namespace OESDataDownloader
             fill2Kbuff[0] = 12;
             fill2Kbuff[2] = 3;
 
-            int index = -1, counter = 0;
+            int index, counter = 0;
 
             if (number == 0xda)
                  index = _launchSize.Length - 1;
@@ -320,10 +340,11 @@ namespace OESDataDownloader
                                 Array.Copy(rdata, 8, data, counter, data.Length - counter);
                                 counter += data.Length - counter;
                             }
+                            var counter1 = counter;
                             Dispatcher.Invoke(() =>
                             {
-                                PbDownloadStatus.Value = counter;
-                                LbBytesReceived.Content = counter + "/" + _launchSize[index];
+                                PbDownloadStatus.Value = counter1;
+                                LbBytesReceived.Content = counter1 + "/" + _launchSize[index];
                             });
                         }
 
@@ -553,9 +574,71 @@ namespace OESDataDownloader
             return result;
         }
 
+        // Таймер, считаеющий сколько прошло время с начала загрузки
+        private void Timer_Tick(object sender, EventArgs e)
+        {
+            _timepassed = _timepassed.AddSeconds(1);
+            Dispatcher.Invoke(() =>
+            {
+                LbTimeEllapsed.Content = "Прошло: " + _timepassed.ToString("mm:ss");
+            });
+        }
+        // Сгенерировать пуски
+        private void GenerateLaunches_Click(object sender, RoutedEventArgs e)
+        {
+            _oedIsAvaliable = true;
+            _diagIsAvaliable = true;
+
+            AddToLaunchInfo(1, 10, 100);
+            AddToLaunchInfo(2, 20, 200);
+            AddToLaunchInfo(3, 30, 300);
+            AddToLaunchInfo(4, 40, 400);
+            AddToLaunchInfo(5, 50, 500);
+            AddToLaunchInfo(6, 60, 600);
+            AddToLaunchInfo(7, 70, 700);
+            AddToLaunchInfo(8, 80, 800);
+            AddToLaunchInfo(9, 90, 900);
+            //AddToLaunchInfo(10, 100, 1000);
+            //AddToLaunchInfo(11, 110, 1200);
+            //AddToLaunchInfo(12, 120, 1300);
+            //AddToLaunchInfo(13, 120, 1400);
+            AddToLaunchInfo(5, 50);
+        }
+        // Показать элементы загрузки
+        private void ShowDowmloadingControls_Click(object sender, RoutedEventArgs e)
+        {
+            SetControlsDownloading();
+        }
+        // Скрыть элементы загрузки
+        private void HideDownloadingControls_Click(object sender, RoutedEventArgs e)
+        {
+            SetControlsReady();
+        }
+        // Скрытый функционал для разработчиков по нажатию Ctrl + Shift + L
+        private void HiddenOpportunities(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.IsKeyDown(Key.LeftCtrl) && Keyboard.IsKeyDown(Key.LeftShift) && Keyboard.IsKeyDown(Key.L))
+            {
+                ShowDowmloadingControls.Visibility = ShowDowmloadingControls.Visibility == Visibility.Hidden
+                    ? Visibility.Visible
+                    : Visibility.Hidden;
+                HideDownloadingControls.Visibility = HideDownloadingControls.Visibility == Visibility.Hidden
+                    ? Visibility.Visible
+                    : Visibility.Hidden;
+                GenerateLaunches.Visibility = GenerateLaunches.Visibility == Visibility.Hidden
+                    ? Visibility.Visible
+                    : Visibility.Hidden;
+            }
+
+            // Альтернативное решение
+            //if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
+            //    (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
+            //    e.Key == Key.L)
+        }
+
         #endregion
 
-        // Скачать пуск номер
+        // Скачать пуск номер №
         private async void Save_Click(object sender, RoutedEventArgs e)
         {
             // Проверяем, доступен ли ОЕД
@@ -604,15 +687,6 @@ namespace OESDataDownloader
                 else MessageBox.Show("Выберите пуск для скачивания!");
             }
         }
-
-        private void Timer_Tick(object sender, EventArgs e)
-        {
-            _timepassed = _timepassed.AddSeconds(1);
-            Dispatcher.Invoke(() =>
-            {
-                LbTimeEllapsed.Content = "Прошло: " + _timepassed.ToString("mm:ss");
-            });
-        }
         private void GetLaunch(int launch,string path, CancellationToken ctsToken)
         {
             byte[] data = GetLaunchFromStm(launch, ctsToken);
@@ -635,6 +709,7 @@ namespace OESDataDownloader
             });
 
         }
+
         // Отменить скачивание пуска
         private void BtnCancelDownload_Click(object sender, RoutedEventArgs e)
         {
@@ -705,34 +780,6 @@ namespace OESDataDownloader
                 if (CheckOed())
                     break;
             }
-        }
-
-        private void GenerateLaunches_Click(object sender, RoutedEventArgs e)
-        {
-            AddToLaunchInfo(1, 10, 100);
-            AddToLaunchInfo(2, 20, 200);
-            AddToLaunchInfo(3, 30, 300);
-            AddToLaunchInfo(4, 40, 400);
-            AddToLaunchInfo(5, 50, 500);
-            AddToLaunchInfo(6, 60, 600);
-            AddToLaunchInfo(7, 70, 700);
-            AddToLaunchInfo(8, 80, 800);
-            AddToLaunchInfo(9, 90, 900);
-            AddToLaunchInfo(10, 100, 1000);
-            AddToLaunchInfo(11, 110, 1200);
-            AddToLaunchInfo(12, 120, 1300);
-            AddToLaunchInfo(13, 120, 1400);
-            AddToLaunchInfo(5, 50);
-        }
-
-        private void ShowDowmloadingControls_Click(object sender, RoutedEventArgs e)
-        {
-            SetControlsDownloading();
-        }
-
-        private void HideDownloadingControls_Click(object sender, RoutedEventArgs e)
-        {
-            SetControlsReady();
         }
     }
 }

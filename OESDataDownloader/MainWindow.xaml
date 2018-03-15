@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="OESDataDownloader" Height="730" Width="940" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Closing="Window_Closing" Loaded="Window_Loaded">
+        Title="OESDataDownloader" Height="730" Width="940" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Closing="Window_Closing" Loaded="Window_Loaded" KeyDown="HiddenOpportunities">
     <Grid Name="MainContainer">
         <Button x:Name="BtnIndicEthernet" Content="Наличие соединения по Ethernet" HorizontalAlignment="Left" Margin="17,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
         <Button x:Name="BtnIndicUsb" Content="Наличие соединения по USB" HorizontalAlignment="Left" Margin="317,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
@@ -33,7 +33,7 @@
                 <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Flag_of_France.png"/>
             </Button.Background>
         </Button>
-        <Button Name="BtnLangRus" Content="" HorizontalAlignment="Left" Margin="760,667,0,0" VerticalAlignment="Top" Width="30" Height="20" Click="BtnLangRus_Click">
+        <Button Name="BtnLangRus" HorizontalAlignment="Left" Margin="760,667,0,0" VerticalAlignment="Top" Width="30" Height="20" Click="BtnLangRus_Click">
             <Button.Background>
                 <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Flag_of_Russia.png"/>
             </Button.Background>
