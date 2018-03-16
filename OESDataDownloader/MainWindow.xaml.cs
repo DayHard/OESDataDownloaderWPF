@@ -88,6 +88,7 @@ namespace OESDataDownloader
         }
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            Hide();
             // Закрытие формы загрузки
             _inProgress.Close();
             // Остановка отправки команды на поддержания соединения
@@ -287,10 +288,13 @@ namespace OESDataDownloader
         {
             byte[] data = GetLaunchFromStm(launch, ctsToken);
 
+            if (data == null) return;
+
             // Если качаем диагностику, устанавливаем имя файла diagnostics
             string fileName = launch.ToString();
             if (launch == 0xDA)
                 fileName = "diagnostics";
+            else fileName = launch.ToString();
 
             string fullPath = path + @"\" + fileName + ".imi";
             using (var bw = new BinaryWriter(new FileStream(fullPath, FileMode.OpenOrCreate)))
@@ -298,7 +302,7 @@ namespace OESDataDownloader
                 bw.Write(data);
             }
 
-            AddToSavedInfo(launch);
+            AddToSavedInfo(fileName);
             Dispatcher.Invoke(() =>
             {
                 LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + @"\\" + path + @"\\";
@@ -354,11 +358,17 @@ namespace OESDataDownloader
 
                 _sender.Send(preplaunch, preplaunch.Length, _endPoint);
                 // Ожидание считывания информации о пуске во Флэш память ОЭД
-                Thread.Sleep(10_000);
+                // Каждые 100мс проверяем команду отмены
+                for (int i = 0; i < 100; i++)
+                {
+                    Thread.Sleep(100);
+                    ctsToken.ThrowIfCancellationRequested();
+                }
+
                 do
                 {
                     _sender.Send(fill2Kbuff, fill2Kbuff.Length, _endPoint);
-                    Thread.Sleep(4);
+         
                     {
                         for (int i = 0; i < 2; i++)
                         {
@@ -393,6 +403,7 @@ namespace OESDataDownloader
             catch (OperationCanceledException)
             {
                 AddToOperationsPerfomed("Скачивание отмененно.");
+                return null;
             }
             return data;
         }
@@ -567,9 +578,9 @@ namespace OESDataDownloader
         /// Добавление нового сохраненного файла
         /// </summary>
         /// <param name="index">Номер пуска</param>
-        private void AddToSavedInfo(int index)
+        private void AddToSavedInfo(string info)
         {
-            Dispatcher.Invoke(() =>{ ListBSavedInfo.Items.Add("Пуск номер: " + index); });
+            Dispatcher.Invoke(() =>{ ListBSavedInfo.Items.Add(info + ".imi"); });
         }
 
         #endregion
@@ -777,7 +788,6 @@ namespace OESDataDownloader
         private void BtnCancelDownload_Click(object sender, RoutedEventArgs e)
         {
             _cts.Cancel();
-            SetControlsReady();
         }
         // Удалить все пуски
         private async void BtnDeleteAll_Click(object sender, RoutedEventArgs e)
