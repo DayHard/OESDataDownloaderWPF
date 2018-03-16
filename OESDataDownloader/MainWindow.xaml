@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="OESDataDownloader" Height="730" Width="940" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Closing="Window_Closing" Loaded="Window_Loaded" KeyDown="HiddenOpportunities">
+        Title="OESDataDownloader" Height="730" Width="940" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Closing="Window_Closing" Loaded="Window_Loaded" KeyDown="HiddenOpportunities" Icon="Resources/BiohazardRed.ico">
     <Grid Name="MainContainer">
         <Button x:Name="BtnIndicEthernet" Content="Наличие соединения по Ethernet" HorizontalAlignment="Left" Margin="17,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
         <Button x:Name="BtnIndicUsb" Content="Наличие соединения по USB" HorizontalAlignment="Left" Margin="317,10,0,0" VerticalAlignment="Top" Width="300" Background="#FFDC3A3A"/>
@@ -50,7 +50,8 @@
         <Button x:Name="BtnCancelDownload" Content="Отмена" HorizontalAlignment="Left" Margin="673,623,0,0" VerticalAlignment="Top" Width="75" Click="BtnCancelDownload_Click"/>
         <Label x:Name="LbTimeEllapsed" Content="Прошло: 00:00" HorizontalAlignment="Left" Margin="578,621,0,0" VerticalAlignment="Top"/>
         <Button x:Name="ShowDowmloadingControls" Content="Show DC" HorizontalAlignment="Left" Margin="19,632,0,0" VerticalAlignment="Top" Width="74" Click="ShowDowmloadingControls_Click" Visibility="Hidden" />
-        <Button x:Name="HideDownloadingControls" Content="Hide DC" HorizontalAlignment="Left" Margin="98,632,0,0" VerticalAlignment="Top" Width="75" RenderTransformOrigin="-1.027,0.5" Click="HideDownloadingControls_Click" Visibility="Hidden"/>
-        <Button x:Name="GenerateLaunches" Content="Generate" HorizontalAlignment="Left" Margin="178,632,0,0" VerticalAlignment="Top" Width="75" Click="GenerateLaunches_Click" Visibility="Hidden"/>
+        <Button x:Name="HideDownloadingControls" Content="Hide DC" HorizontalAlignment="Left" Margin="98,632,0,0" VerticalAlignment="Top" Width="75" RenderTransformOrigin="-1.027,0.5" Click="HideDownloadingControls_Click" Visibility="Hidden" />
+        <Button x:Name="GenerateLaunches" Content="Generate" HorizontalAlignment="Left" Margin="178,632,0,0" VerticalAlignment="Top" Width="75" Click="GenerateLaunches_Click" Visibility="Hidden" />
+        <Button x:Name="CheckLw" Content="Check LW" HorizontalAlignment="Left" Margin="178,657,0,0" VerticalAlignment="Top" Width="75" RenderTransformOrigin="-0.267,-0.95" Click="CheckLW_Click" Visibility="Hidden"/>
     </Grid>
 </Window>

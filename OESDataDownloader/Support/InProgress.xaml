@@ -5,10 +5,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:support="clr-namespace:OESDataDownloader.Support"
         mc:Ignorable="d"
-        Title="InProgress" Height="101.867" Width="101.98" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" WindowStyle="None" Opacity="1">
-    <Grid Margin="0,0,0,-4">
-        <Viewbox HorizontalAlignment="Left" Height="100" VerticalAlignment="Top" Width="100">
-            <support:CircularProgressBar HorizontalAlignment="Center" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" VerticalAlignment="Center" />
+        Title="InProgress" Height="115" Width="100
+        " WindowStartupLocation="CenterOwner" ResizeMode="NoResize" WindowStyle="None" Opacity="1">
+    <Grid>
+        <Viewbox HorizontalAlignment="Center" Height="100" VerticalAlignment="Bottom" Width="100">
+            <support:CircularProgressBar />
         </Viewbox>
+        <Label x:Name="LabCommand" Content="Удаление..." HorizontalAlignment="Left" Margin="5,-6,0,0" VerticalAlignment="Top" Width="90" Height="23" FontSize="10" HorizontalContentAlignment="Center" FontWeight="Bold"/>
     </Grid>
 </Window>

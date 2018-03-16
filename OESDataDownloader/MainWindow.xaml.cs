@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Drawing.Printing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -32,13 +31,15 @@ namespace OESDataDownloader
         private readonly UdpClient _sender;
         private readonly UdpClient _resiver;
         private readonly IPEndPoint _endPoint;
-        private readonly InProgress _inProgress;
+        private InProgress _inProgress;
         private IPEndPoint _remoteIpEndPoint;
         private CancellationTokenSource _cts;
         private static readonly DispatcherTimer Timer = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
         private static readonly DispatcherTimer DoNotCloseConnectionTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1)};
         private static DateTime _timepassed;
         private static string _remoteIp;
+        private Thread _thdCheckNet;
+        private AutoResetEvent _waitHandle;
         private bool _oedIsAvaliable;
         private bool _diagIsAvaliable;
 
@@ -68,7 +69,6 @@ namespace OESDataDownloader
             _sender = new UdpClient();
             _resiver = new UdpClient(LocalPort) { Client = { ReceiveTimeout = TimeOut, DontFragment = false } };
             _endPoint = new IPEndPoint(IPAddress.Parse(_remoteIp), RemotePort);
-            _inProgress = new InProgress();
             // Подпись на событие, для секундомера
             Timer.Tick += Timer_Tick;
             // Подпись на событие, поддержания связи с STM
@@ -80,24 +80,21 @@ namespace OESDataDownloader
         {
             LbVersion.Content = "Версия ПО: " + Assembly.GetExecutingAssembly().GetName().Version;
             // Установка таймаута приемника проверки статуса соединения
-            var thread = new Thread(CheckNetStatus) { IsBackground = true };
-            thread.Start();
-            // Задаем владельца формы
-            _inProgress.Owner = this;
-            _inProgress.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            _thdCheckNet = new Thread(CheckNetStatus) { IsBackground = true };
+            _waitHandle = new AutoResetEvent(true);
+            _thdCheckNet.Start();
         }
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            Hide();
             // Закрытие формы загрузки
-            _inProgress.Close();
+            _inProgress?.Close();
             // Остановка отправки команды на поддержания соединения
             DoNotCloseConnectionTimer.Stop();
             //Закрытие портов перед выходом из программы
             _resiver.Close();
             _sender.Close();
             // Обновление файла конфигурации
-            UpdateConfiguration();
+             UpdateConfiguration();
         }
 
         #region NETStatus
@@ -109,10 +106,11 @@ namespace OESDataDownloader
                 if (CheckEthernet() && CheckUsb() && CheckOed())
                 {
                     _oedIsAvaliable = true;
-                    break;
+                    _waitHandle.WaitOne();
                 }
                Thread.Sleep(ConnectionRetry); 
             }
+            // ReSharper disable once FunctionNeverReturns
         }
         private bool CheckEthernet()
         {
@@ -177,20 +175,18 @@ namespace OESDataDownloader
             {
                 _diagIsAvaliable = false;
                 // Очистим список загруженных пусков
-                Dispatcher.Invoke(() => 
-                {
-                    ListBLaunchInfo.Items.Clear();
-                });
+                Dispatcher.Invoke(() => {ListBLaunchInfo.Items.Clear();});
 
                 var data = GetAllInfo();
 
                 if (data == null)
                 {
-                    AddToOperationsPerfomed("STM ЛЁГ!");
+                    AddToOperationsPerfomed("STM завис!");
                     return false;
                 }
-
-                    //throw new Exception("STM не ответил на запрос.");
+                // Удаление/Форматирование Flash ОЭД в процессе
+                if (data.Length == 8 && data[3] == 0xff)
+                    return false;
 
                 if (ToLittleEndian(data, 5, 2) == 0x1506)
                 {
@@ -214,22 +210,19 @@ namespace OESDataDownloader
                     AddToOperationsPerfomed("Количество записанных диагностик: " + ToBigEndian(data, 2 + 128, 2));
                     _diagIsAvaliable = true;
                 }
-                if (data.Length != 8)
-                {
-                    Dispatcher.Invoke(() =>{ BtnIndicOed.Background = Brushes.GreenYellow; });
-                    return true;
-                }
+                Dispatcher.Invoke(() => { BtnIndicOed.Background = Brushes.GreenYellow; });
+                return true;
             }
             catch (SocketException)
             {
                 AddToOperationsPerfomed("ОЕД не вернул список пусков. TimeOut.");
-            }   
-            Dispatcher.Invoke(() =>
-            {
-                ListBLaunchInfo.Items.Clear();
-                BtnIndicOed.Background = Brushes.OrangeRed;
-            });                
-            return false;
+                Dispatcher.Invoke(() =>
+                {
+                    ListBLaunchInfo.Items.Clear();
+                    BtnIndicOed.Background = Brushes.OrangeRed;
+                });
+                return false;
+            }
         }
 
         #endregion
@@ -291,10 +284,7 @@ namespace OESDataDownloader
             if (data == null) return;
 
             // Если качаем диагностику, устанавливаем имя файла diagnostics
-            string fileName = launch.ToString();
-            if (launch == 0xDA)
-                fileName = "diagnostics";
-            else fileName = launch.ToString();
+            var fileName = launch == 0xDA ? "diagnostics" : launch.ToString();
 
             string fullPath = path + @"\" + fileName + ".imi";
             using (var bw = new BinaryWriter(new FileStream(fullPath, FileMode.OpenOrCreate)))
@@ -355,7 +345,6 @@ namespace OESDataDownloader
 
             try
             {
-
                 _sender.Send(preplaunch, preplaunch.Length, _endPoint);
                 // Ожидание считывания информации о пуске во Флэш память ОЭД
                 // Каждые 100мс проверяем команду отмены
@@ -417,15 +406,8 @@ namespace OESDataDownloader
             deleteAllLaunches[2] = 4;
 
             _sender.Send(deleteAllLaunches, deleteAllLaunches.Length, _endPoint);
+            _waitHandle.Set();
 
-            // Запрашиваем информацию о пусках, пока не получим ответ
-            while (true)
-            {
-                Thread.Sleep(1000);
-
-                if (CheckOed())
-                break;
-            }
         }
         /// <summary>
         /// Отморматирвоть ОЭД (запускать в отдельном потомке\задаче)
@@ -437,15 +419,7 @@ namespace OESDataDownloader
             formatOed[2] = 5;
 
             _sender.Send(formatOed, formatOed.Length, _endPoint);
-
-            // Запрашиваем информацию о пусках, пока не получим ответ
-            while (true)
-            {
-                Thread.Sleep(1000);
-
-                if (CheckOed())
-                break;
-            }
+            _waitHandle.Set();
         }
 
         #endregion
@@ -577,7 +551,7 @@ namespace OESDataDownloader
         /// <summary>
         /// Добавление нового сохраненного файла
         /// </summary>
-        /// <param name="index">Номер пуска</param>
+        /// <param name="info">Номер пуска</param>
         private void AddToSavedInfo(string info)
         {
             Dispatcher.Invoke(() =>{ ListBSavedInfo.Items.Add(info + ".imi"); });
@@ -711,6 +685,25 @@ namespace OESDataDownloader
         {
             SetControlsReady();
         }
+        // Показать форму загрузки
+        private void CheckLW_Click(object sender, RoutedEventArgs e)
+        {
+            if (_inProgress == null)
+            {
+                _inProgress = new InProgress("Удаление")
+                {
+                    Owner = this,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+                _inProgress.Show();
+            }
+            else
+            {
+                _inProgress.ChangeMessage("Форматирвание");
+                // Задаем владельца формы
+                _inProgress.Show();
+            }
+        }
         // Скрытый функционал для разработчиков по нажатию Ctrl + Shift + L
         private void HiddenOpportunities(object sender, KeyEventArgs e)
         {
@@ -725,12 +718,37 @@ namespace OESDataDownloader
                 GenerateLaunches.Visibility = GenerateLaunches.Visibility == Visibility.Hidden
                     ? Visibility.Visible
                     : Visibility.Hidden;
+                CheckLw.Visibility = CheckLw.Visibility == Visibility.Hidden
+                    ? Visibility.Visible
+                    : Visibility.Hidden;
             }
 
             // Альтернативное решение
             //if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
             //    (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
             //    e.Key == Key.L)
+        }
+        /// <summary>
+        /// Показать анимацию загрузки
+        /// </summary>
+        /// <param name="message">Сообщение</param>
+        private void ShowWorkInProgress(string message)
+        {
+            if (_inProgress == null)
+            {
+                _inProgress = new InProgress(message)
+                {
+                    Owner = this,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+                _inProgress.Show();
+            }
+            else
+            {
+                _inProgress.ChangeMessage(message);
+                // Задаем владельца формы
+                _inProgress.Show();
+            }
         }
 
         #endregion
@@ -798,9 +816,11 @@ namespace OESDataDownloader
             // Подтверждение удаления пусков
             if (MessageBox.Show("Вы уверены, что хотите удалить все пуски?", "Внимание", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
                 return;
+            ShowWorkInProgress("Удаление");
 
             await Task.Run(() => DeleteAllLaunches());
 
+            _inProgress?.Hide();
             AddToOperationsPerfomed("Удаление произведено успешно.");
             MessageBox.Show("Все пуски были успешно удалены.");
         }
@@ -813,16 +833,13 @@ namespace OESDataDownloader
             // Подтверждение форматирования Flash
             if (MessageBox.Show("Вы уверены, что хотите отформатировать FLASH?", "Внимание", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.No)
                 return;
-
-            _inProgress.Show();
+            ShowWorkInProgress("Форматирование");
 
             await Task.Run(() => FormatOed());
 
-            _inProgress.Hide();
-
+            _inProgress?.Hide();
             AddToOperationsPerfomed("Форматирование произведено успешно.");
             MessageBox.Show("ОЭД успешно отформатирован.");
         }
-
     }
 }

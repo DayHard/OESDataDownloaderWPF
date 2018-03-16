@@ -7,9 +7,15 @@ namespace OESDataDownloader.Support
     /// </summary>
     public partial class InProgress : Window
     {
-        public InProgress()
+        public InProgress(string message)
         {
             InitializeComponent();
+            LabCommand.Content = message;
+        }
+
+        public void ChangeMessage(string message)
+        {
+            LabCommand.Content = message;
         }
     }
 }
