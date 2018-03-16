@@ -80,7 +80,7 @@ namespace OESDataDownloader
         {
             LbVersion.Content = "Версия ПО: " + Assembly.GetExecutingAssembly().GetName().Version;
             // Установка таймаута приемника проверки статуса соединения
-            _thdCheckNet = new Thread(CheckNetStatus) { IsBackground = true };
+            _thdCheckNet = new Thread(CheckNetStatus) {IsBackground = true};
             _waitHandle = new AutoResetEvent(true);
             _thdCheckNet.Start();
         }
@@ -123,25 +123,31 @@ namespace OESDataDownloader
                     Dispatcher.Invoke(() =>{ BtnIndicEthernet.Background = Brushes.GreenYellow; });
                     return true;
                 case IPStatus.TimedOut:
-                        AddToOperationsPerfomed("Ошибка пинга STM.");
-                    return false;
+                        AddToOperationsPerfomed("Ошибка пинга STM. TimeOut.");
+                        break;
                 default:
                         AddToOperationsPerfomed("Неизвестная ошибка, при попытке пинга.");
-                    return false;
+                        break;
                 }
             }
             catch (Exception ex)
             {
                 AddToOperationsPerfomed("Ошибка: " + ex.Message);
-                return false;
             }
+            Dispatcher.Invoke(() => 
+            {
+                BtnIndicEthernet.Background = Brushes.OrangeRed;
+                BtnIndicUsb.Background = Brushes.OrangeRed;
+                BtnIndicOed.Background = Brushes.OrangeRed;
+            });
+            return false;
         }
         private bool CheckUsb()
         {
             try
             {
                 // Если буфер приема не пустой, очищаем
-                if (_resiver.Available > 0)
+                if (_resiver != null && _resiver?.Available > 0)
                 {
                     _resiver.Receive(ref _remoteIpEndPoint);
                 }
@@ -166,6 +172,7 @@ namespace OESDataDownloader
             Dispatcher.Invoke(() => 
             {
                 BtnIndicUsb.Background = Brushes.OrangeRed;
+                BtnIndicOed.Background = Brushes.OrangeRed;
             }); 
             return false;
         }
@@ -186,7 +193,10 @@ namespace OESDataDownloader
                 }
                 // Удаление/Форматирование Flash ОЭД в процессе
                 if (data.Length == 8 && data[3] == 0xff)
+                {
+                    Dispatcher.Invoke(() => { BtnIndicOed.Background = Brushes.Yellow; });
                     return false;
+                }
 
                 if (ToLittleEndian(data, 5, 2) == 0x1506)
                 {
@@ -241,7 +251,7 @@ namespace OESDataDownloader
             request[2] = 1;
 
             // Очистка буфера приема UDP
-            if (_resiver.Available > 0)
+            if (_resiver?.Available > 0)
             {
                 _resiver.Receive(ref _remoteIpEndPoint);
             }
@@ -337,7 +347,7 @@ namespace OESDataDownloader
             _resiver.Client.ReceiveTimeout = ResiveTimeOut;
 
             // Очистка буфера приема UDP
-            if (_resiver.Available > 0)
+            if (_resiver != null && _resiver?.Available > 0)
             {
                 _resiver.Receive(ref _remoteIpEndPoint);
             }
@@ -401,6 +411,7 @@ namespace OESDataDownloader
         /// </summary>
         private void DeleteAllLaunches()
         {
+            _oedIsAvaliable = false;
             byte[] deleteAllLaunches = new byte[8];
             deleteAllLaunches[0] = 12;
             deleteAllLaunches[2] = 4;
@@ -408,20 +419,39 @@ namespace OESDataDownloader
             _sender.Send(deleteAllLaunches, deleteAllLaunches.Length, _endPoint);
             _waitHandle.Set();
 
+            while (true)
+            {
+                if (_oedIsAvaliable)
+                    break;
+                Thread.Sleep(ConnectionRetry);
+            }
         }
         /// <summary>
         /// Отморматирвоть ОЭД (запускать в отдельном потомке\задаче)
         /// </summary>
         private void FormatOed()
         {
+            _oedIsAvaliable = false;
             byte[] formatOed = new byte[8];
             formatOed[0] = 12;
             formatOed[2] = 5;
 
             _sender.Send(formatOed, formatOed.Length, _endPoint);
             _waitHandle.Set();
-        }
 
+            while (true)
+            {
+                if (_oedIsAvaliable)
+                    break;
+
+                Dispatcher.Invoke(() => 
+                {
+                    if (BtnIndicEthernet.Background == Brushes.OrangeRed || BtnIndicUsb.Background == Brushes.OrangeRed || BtnIndicOed.Background == Brushes.OrangeRed)
+                        return;
+                });
+                Thread.Sleep(ConnectionRetry);
+            }
+        }
         #endregion
 
         #region LanguageConfiguration
@@ -821,8 +851,18 @@ namespace OESDataDownloader
             await Task.Run(() => DeleteAllLaunches());
 
             _inProgress?.Hide();
-            AddToOperationsPerfomed("Удаление произведено успешно.");
-            MessageBox.Show("Все пуски были успешно удалены.");
+
+            if (_oedIsAvaliable)
+            {
+                AddToOperationsPerfomed("Удаление произведено успешно.");
+                MessageBox.Show("Все пуски были успешно удалены.");
+            }
+            else
+            {
+                AddToOperationsPerfomed("Ошибка удаления пусков из ОЭД.");
+                MessageBox.Show("В ходе удаления пусков произошла неизвестная ошибка.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
         }
         // Форматировать ОЭД
         private async void BtnFormating_Click(object sender, RoutedEventArgs e)
@@ -838,8 +878,18 @@ namespace OESDataDownloader
             await Task.Run(() => FormatOed());
 
             _inProgress?.Hide();
-            AddToOperationsPerfomed("Форматирование произведено успешно.");
-            MessageBox.Show("ОЭД успешно отформатирован.");
+
+            if (_oedIsAvaliable)
+            {
+                AddToOperationsPerfomed("Форматирование произведено успешно.");
+                MessageBox.Show("ОЭД успешно отформатирован.");
+            }
+            else
+            {
+                AddToOperationsPerfomed("Ошибка форматирования ОЭД.");
+                MessageBox.Show("В ходе форматирования произошла неизвестная ошибка.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
         }
     }
 }
