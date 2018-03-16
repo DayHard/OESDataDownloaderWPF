@@ -153,9 +153,9 @@ namespace OESDataDownloader
                 }
 
                 _sender.Send(_comGetStatus, _comGetStatus.Length, _endPoint);
-                var resp = _resiver.Receive(ref _remoteIpEndPoint);
+                var resp = _resiver?.Receive(ref _remoteIpEndPoint);
                 //Проверка доступности ОЕД 
-                if (resp[0] == 10 && resp[2] == 1 && resp[8] == 1)
+                if (resp != null && resp[0] == 10 && resp[2] == 1 && resp[8] == 1)
                 {
                     Dispatcher.Invoke(() =>
                     {
@@ -245,13 +245,16 @@ namespace OESDataDownloader
         /// <returns>Массив пусков</returns>
         private byte[] GetAllInfo()
         {
+            if (_resiver == null)
+                return null;
+
             // Формирование команды получения всех пусков
             var request = new byte[8];
             request[0] = 12;// ОЭД
             request[2] = 1;
 
             // Очистка буфера приема UDP
-            if (_resiver?.Available > 0)
+            if (_resiver.Available > 0)
             {
                 _resiver.Receive(ref _remoteIpEndPoint);
             }
@@ -443,12 +446,6 @@ namespace OESDataDownloader
             {
                 if (_oedIsAvaliable)
                     break;
-
-                Dispatcher.Invoke(() => 
-                {
-                    if (BtnIndicEthernet.Background == Brushes.OrangeRed || BtnIndicUsb.Background == Brushes.OrangeRed || BtnIndicOed.Background == Brushes.OrangeRed)
-                        return;
-                });
                 Thread.Sleep(ConnectionRetry);
             }
         }

@@ -1,11 +1,9 @@
-﻿using System.Windows;
-
-namespace OESDataDownloader.Support
+﻿namespace OESDataDownloader.Support
 {
     /// <summary>
     /// Логика взаимодействия для InProgress.xaml
     /// </summary>
-    public partial class InProgress : Window
+    public partial class InProgress
     {
         public InProgress(string message)
         {

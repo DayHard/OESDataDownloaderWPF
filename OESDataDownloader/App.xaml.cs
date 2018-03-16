@@ -6,22 +6,19 @@ namespace OESDataDownloader
     /// <summary>
     /// Логика взаимодействия для App.xaml
     /// </summary>
-    public partial class App : Application
+    public partial class App
     {
-        static Mutex InstanceCheckMutex;
+        private static Mutex _instanceCheckMutex;
         private void Application_Startup(object sender, StartupEventArgs e)
         {
-            if (!InstanceCheck())
-            {
-                MessageBox.Show("Программа уже запущена!", "Ошибка", MessageBoxButton.OK);
-                System.Environment.Exit(1);
-            }
-
+            if (InstanceCheck()) return;
+            MessageBox.Show("Программа уже запущена!", "Ошибка", MessageBoxButton.OK);
+            System.Environment.Exit(1);
         }
         private static bool InstanceCheck()
         {
-            bool isNew;
-            InstanceCheckMutex = new Mutex(true, "OESDataDownloader", out isNew);
+            // "OESDataDownloader" - уникальное имя мьютекс в перелах приложения
+            _instanceCheckMutex = new Mutex(true, "OESDataDownloader", out bool isNew);
             return isNew;
         }
     }
