@@ -25,22 +25,22 @@
         <Label x:Name="LbVersion" Content="Версия ПО: 0.0.0.0" HorizontalAlignment="Left" Margin="10,666,0,0" VerticalAlignment="Top"/>
         <Button Name="BtnLangEng" Content="" HorizontalAlignment="Left" Margin="795,667,0,0" VerticalAlignment="Top" Width="30" Height="20" Click="BtnLangEng_Click" Visibility="Hidden">
             <Button.Background>
-                <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Flag_Of_Britain.jpg"/>
+                <ImageBrush ImageSource="Resources/Flag_of_Britain.jpg"/>
             </Button.Background>
         </Button>
-        <Button Name="BtnLangFr" Content="" HorizontalAlignment="Left" Margin="830,667,0,0" VerticalAlignment="Top" Width="30" Height="20" RenderTransformOrigin="0.513,1.679" Click="BtnLangFr_Click" Visibility="Hidden" >
+        <Button Name="BtnLangFr" Content="" HorizontalAlignment="Left" Margin="830,667,0,0" VerticalAlignment="Top" Width="30" Height="20" RenderTransformOrigin="0.513,1.679" Click="BtnLangFr_Click" Visibility="Hidden">
             <Button.Background>
-                <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Flag_of_France.png"/>
+                <ImageBrush ImageSource="Resources/Flag_of_France.png"/>
             </Button.Background>
         </Button>
         <Button Name="BtnLangRus" HorizontalAlignment="Left" Margin="760,667,0,0" VerticalAlignment="Top" Width="30" Height="20" Click="BtnLangRus_Click" Visibility="Hidden">
             <Button.Background>
-                <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Flag_of_Russia.png"/>
+                <ImageBrush ImageSource="Resources/Flag_of_Russia.png"/>
             </Button.Background>
         </Button>
         <Button HorizontalAlignment="Left" Margin="888,662,0,0" VerticalAlignment="Top" Width="30" Height="25" RenderTransformOrigin="1.208,1.047" Visibility="Hidden">
             <Button.Background>
-                <ImageBrush ImageSource="pack://siteoforigin:,,,/Resources/Properties.png"/>
+                <ImageBrush ImageSource="Resources/Properties.png"/>
             </Button.Background>
         </Button>
         <Grid HorizontalAlignment="Left" Height="32" Margin="19,583,0,0" VerticalAlignment="Top" Width="899">
