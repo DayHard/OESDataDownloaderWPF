@@ -79,6 +79,8 @@ namespace OESDataDownloader
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LbVersion.Content = "Версия ПО: " + Assembly.GetExecutingAssembly().GetName().Version;
+            // Скрываем путь к сохраненному файлу
+            LabSavedFilesPaths.Visibility = Visibility.Hidden;
             // Установка таймаута приемника проверки статуса соединения
             _thdCheckNet = new Thread(CheckNetStatus) {IsBackground = true};
             _waitHandle = new AutoResetEvent(true);
@@ -308,6 +310,7 @@ namespace OESDataDownloader
             AddToSavedInfo(fileName);
             Dispatcher.Invoke(() =>
             {
+                LabSavedFilesPaths.Visibility = Visibility.Visible;
                 LabSavedFilesPaths.Content = "Расположение сохраняемых файлов: " + @"\\" + path + @"\\";
             });
 
